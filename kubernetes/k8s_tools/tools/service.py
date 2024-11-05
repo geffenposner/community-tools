@@ -50,28 +50,28 @@ service_update_tool = KubernetesTool(
     # Initialize the patch content
     patch_content="{\"spec\": {}}"
 
-    # Append the type if the variable is set
-    if [ "${type+x}" ]; then
-        patch_content=$(echo "$patch_content" | jq ".spec += {\"type\": \"$type\"}")
+    # Append the type if the variable is set and not empty
+    if [ -n "${type:-}" ]; then
+        patch_content=$(echo "$patch_content" | jq --arg type "$type" '.spec += {"type": $type}')
     fi
 
-    # Build ports array only if port or target_port variables are set
-    if [ "${port+x}" ] || [ "${target_port+x}" ]; then
+    # Build ports array only if port or target_port is provided
+    if [ -n "${port:-}" ] || [ -n "${target_port:-}" ]; then
         ports_patch="{}"
         
-        # Add port if the variable is set
-        if [ "${port+x}" ]; then
-            ports_patch=$(echo "$ports_patch" | jq ". += {\"port\": $port}")
+        # Add port if provided
+        if [ -n "${port:-}" ]; then
+            ports_patch=$(echo "$ports_patch" | jq --argjson port "$port" '. += {"port": $port}')
         fi
         
-        # Add targetPort if the variable is set
-        if [ "${target_port+x}" ]; then
-            ports_patch=$(echo "$ports_patch" | jq ". += {\"targetPort\": $target_port}")
+        # Add targetPort if provided
+        if [ -n "${target_port:-}" ]; then
+            ports_patch=$(echo "$ports_patch" | jq --argjson targetPort "$target_port" '. += {"targetPort": $targetPort}')
         fi
 
         # Append ports_patch only if it's not empty
         if [ "$ports_patch" != "{}" ]; then
-            patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
+            patch_content=$(echo "$patch_content" | jq --argjson ports "$ports_patch" '.spec.ports += [$ports]')
         fi
     fi
 
