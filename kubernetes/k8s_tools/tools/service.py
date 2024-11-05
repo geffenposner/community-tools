@@ -47,28 +47,44 @@ service_update_tool = KubernetesTool(
         exit 1
     fi
 
-    # Initialize the patch content
-    patch_content="{\"spec\": {}}"
-
-    # Append the type if the variable is set and not empty
+    # Start with an empty object and build it using jq
+    jq_filter='.spec = {}'
+    
+    # Add type if provided
     if [ -n "${type:-}" ]; then
-        patch_content=$(echo "$patch_content" | jq --arg type "$type" '.spec += {"type": $type}')
+        jq_filter="$jq_filter | .spec.type = \$type"
     fi
 
-    # Build ports array only if port or target_port is provided
+    # Add ports if either port or target_port is provided
     if [ -n "${port:-}" ] || [ -n "${target_port:-}" ]; then
-        # Build ports object using jq
-        port_obj="{}"
-        if [ -n "${port:-}" ]; then
-            port_obj=$(echo '{}' | jq --argjson port "$port" '. + {"port": $port}')
-        fi
-        if [ -n "${target_port:-}" ]; then
-            port_obj=$(echo "$port_obj" | jq --argjson targetPort "$target_port" '. + {"targetPort": $targetPort}')
-        fi
+        # Start building the port object filter
+        port_obj='{}'
         
-        # Add the ports array to the patch content
-        patch_content=$(echo "$patch_content" | jq --argjson portObj "$port_obj" '.spec.ports = [$portObj]')
+        if [ -n "${port:-}" ]; then
+            jq_filter="$jq_filter | .spec.ports = [{\\\"port\\\": \$port"
+            if [ -n "${target_port:-}" ]; then
+                jq_filter="$jq_filter, \\\"targetPort\\\": \$targetPort}]"
+            else
+                jq_filter="$jq_filter}]"
+            fi
+        elif [ -n "${target_port:-}" ]; then
+            jq_filter="$jq_filter | .spec.ports = [{\\\"targetPort\\\": \$targetPort}]"
+        fi
     fi
+
+    # Build the final patch content
+    patch_args=()
+    if [ -n "${type:-}" ]; then
+        patch_args+=(--arg type "$type")
+    fi
+    if [ -n "${port:-}" ]; then
+        patch_args+=(--argjson port "$port")
+    fi
+    if [ -n "${target_port:-}" ]; then
+        patch_args+=(--argjson targetPort "$target_port")
+    fi
+
+    patch_content=$(echo '{}' | jq "${patch_args[@]}" "$jq_filter")
 
     # Debug: Output the final patch content for verification
     echo "Patch content: $patch_content"
