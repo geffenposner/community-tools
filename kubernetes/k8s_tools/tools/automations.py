@@ -179,13 +179,13 @@ node_status_tool = KubernetesTool(
 
 find_suspicious_errors_tool = KubernetesTool(
     name="find_suspicious_errors",
-    description="Finds suspicious errors in a Kubernetes namespace or across all namespaces",
+    description="Finds suspicious errors in a specific Kubernetes namespace or across all namespaces if 'all' is provided.",
     content="""
     #!/bin/bash
     set -e
 
-    # If namespace is not provided, default to searching across all namespaces
-    if [ -z "$namespace" ]; then
+    # Namespace is required and either a specific namespace or 'all' for all namespaces
+    if [ "$namespace" == "all" ]; then
         echo "🔍 Searching for suspicious errors in all namespaces"
         namespace_flag="--all-namespaces"
     else
@@ -220,7 +220,7 @@ find_suspicious_errors_tool = KubernetesTool(
     }'
     """,
     args=[
-        Arg(name="namespace", type="str", description="Kubernetes namespace to search for errors. If not provided, defaults to all namespaces.", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace to search for errors. Use 'all' to search in all namespaces.", required=True),
     ],
 )
 
