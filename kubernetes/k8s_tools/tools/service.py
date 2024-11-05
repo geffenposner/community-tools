@@ -71,7 +71,11 @@ service_update_tool = KubernetesTool(
         if [ -n "$target_port" ]; then
             ports_patch=$(echo "$ports_patch" | jq ". += {\"targetPort\": $target_port}")
         fi
-        patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
+
+        # Ensure valid port/target_port fields are added to the JSON
+        if [ "$ports_patch" != "{}" ]; then
+            patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
+        fi
     fi
 
     # Validate the final patch content
