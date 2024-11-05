@@ -47,6 +47,11 @@ service_update_tool = KubernetesTool(
         exit 1
     fi
 
+    # Ensure that optional parameters are set to empty strings if not provided
+    type="${type:-}"
+    port="${port:-}"
+    target_port="${target_port:-}"
+
     # Initialize the patch content
     patch_content="{\"spec\": {}}"
 
