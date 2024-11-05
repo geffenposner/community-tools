@@ -47,13 +47,25 @@ service_update_tool = KubernetesTool(
         exit 1
     fi
 
-    # Define flags for updating service properties
-    type_flag=$( [ -n "$type" ] && echo "type=$type" || echo "" )
-    port_flag=$( [ -n "$port" ] && echo "port=$port" || echo "" )
-    target_port_flag=$( [ -n "$target_port" ] && echo "targetPort=$target_port" || echo "" )
+    # Initialize the patch content
+    patch_content="{\"spec\": {}}"
 
-    # Build the patch JSON
-    patch_content="{\"spec\": {\"ports\": [{\"$port_flag\", \"$target_port_flag\"}], \"$type_flag\"}}"
+    # Append the type if provided
+    if [ -n "$type" ]; then
+        patch_content=$(echo "$patch_content" | jq ".spec += {\"type\": \"$type\"}")
+    fi
+
+    # Append the port and target port if provided
+    if [ -n "$port" ] || [ -n "$target_port" ]; then
+        ports_patch="{}"
+        if [ -n "$port" ]; then
+            ports_patch=$(echo "$ports_patch" | jq ". += {\"port\": $port}")
+        fi
+        if [ -n "$target_port" ]; then
+            ports_patch=$(echo "$ports_patch" | jq ". += {\"targetPort\": $target_port}")
+        fi
+        patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
+    fi
 
     # Execute the kubectl patch command
     kubectl patch service $name -n $namespace -p "$patch_content"
@@ -66,6 +78,7 @@ service_update_tool = KubernetesTool(
         Arg(name="target_port", type="int", description="New target port number", required=False),
     ],
 )
+
 
 # Service Describe Tool
 service_describe_tool = KubernetesTool(
