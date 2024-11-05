@@ -47,11 +47,6 @@ service_update_tool = KubernetesTool(
         exit 1
     fi
 
-    # Ensure that optional parameters are set to empty strings if not provided
-    type="${type:-}"
-    port="${port:-}"
-    target_port="${target_port:-}"
-
     # Initialize the patch content
     patch_content="{\"spec\": {}}"
 
@@ -60,28 +55,30 @@ service_update_tool = KubernetesTool(
         patch_content=$(echo "$patch_content" | jq ".spec += {\"type\": \"$type\"}")
     fi
 
-    # Append the port and target port if provided
+    # Build ports array only if port or target_port is provided
     if [ -n "$port" ] || [ -n "$target_port" ]; then
         ports_patch="{}"
-        # Only append port if it's a valid number
+        
+        # Add port if provided
         if [ -n "$port" ]; then
             ports_patch=$(echo "$ports_patch" | jq ". += {\"port\": $port}")
         fi
-        # Only append targetPort if it's a valid number
+        
+        # Add targetPort if provided
         if [ -n "$target_port" ]; then
             ports_patch=$(echo "$ports_patch" | jq ". += {\"targetPort\": $target_port}")
         fi
 
-        # Ensure valid port/target_port fields are added to the JSON
+        # Append ports_patch only if it's not empty
         if [ "$ports_patch" != "{}" ]; then
             patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
         fi
     fi
 
-    # Validate the final patch content
+    # Debug: Output the final patch content for verification
     echo "Patch content: $patch_content"
 
-    # If no changes were added to the patch, exit with an error
+    # Ensure that something valid was added to the patch
     if [ "$patch_content" = "{\"spec\": {}}" ]; then
         echo "❌ Error: No valid fields provided for update."
         exit 1
