@@ -57,22 +57,17 @@ service_update_tool = KubernetesTool(
 
     # Build ports array only if port or target_port is provided
     if [ -n "${port:-}" ] || [ -n "${target_port:-}" ]; then
-        ports_patch="{}"
-        
-        # Add port if provided
+        # Build ports object using jq
+        port_obj="{}"
         if [ -n "${port:-}" ]; then
-            ports_patch=$(echo "$ports_patch" | jq --argjson port "$port" '. += {"port": $port}')
+            port_obj=$(echo '{}' | jq --argjson port "$port" '. + {"port": $port}')
+        fi
+        if [ -n "${target_port:-}" ]; then
+            port_obj=$(echo "$port_obj" | jq --argjson targetPort "$target_port" '. + {"targetPort": $targetPort}')
         fi
         
-        # Add targetPort if provided
-        if [ -n "${target_port:-}" ]; then
-            ports_patch=$(echo "$ports_patch" | jq --argjson targetPort "$target_port" '. += {"targetPort": $targetPort}')
-        fi
-
-        # Append ports_patch only if it's not empty
-        if [ "$ports_patch" != "{}" ]; then
-            patch_content=$(echo "$patch_content" | jq --argjson ports "$ports_patch" '.spec.ports += [$ports]')
-        fi
+        # Add the ports array to the patch content
+        patch_content=$(echo "$patch_content" | jq --argjson portObj "$port_obj" '.spec.ports = [$portObj]')
     fi
 
     # Debug: Output the final patch content for verification
