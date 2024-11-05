@@ -50,22 +50,22 @@ service_update_tool = KubernetesTool(
     # Initialize the patch content
     patch_content="{\"spec\": {}}"
 
-    # Append the type if provided
-    if [ -n "$type" ]; then
+    # Check if the 'type' parameter is passed and append it if it exists
+    if [ "${type+x}" ]; then
         patch_content=$(echo "$patch_content" | jq ".spec += {\"type\": \"$type\"}")
     fi
 
     # Build ports array only if port or target_port is provided
-    if [ -n "$port" ] || [ -n "$target_port" ]; then
+    if [ "${port+x}" ] || [ "${target_port+x}" ]; then
         ports_patch="{}"
         
         # Add port if provided
-        if [ -n "$port" ]; then
+        if [ "${port+x}" ]; then
             ports_patch=$(echo "$ports_patch" | jq ". += {\"port\": $port}")
         fi
         
         # Add targetPort if provided
-        if [ -n "$target_port" ]; then
+        if [ "${target_port+x}" ]; then
             ports_patch=$(echo "$ports_patch" | jq ". += {\"targetPort\": $target_port}")
         fi
 
@@ -95,6 +95,7 @@ service_update_tool = KubernetesTool(
         Arg(name="target_port", type="int", description="New target port number", required=False),
     ],
 )
+
 
 
 # Service Describe Tool
