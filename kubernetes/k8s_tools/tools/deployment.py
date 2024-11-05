@@ -35,26 +35,32 @@ deployment_management_tool = KubernetesTool(
 
 scale_deployment_tool = KubernetesTool(
     name="scale_deployment",
-    description="Scales a Kubernetes deployment",
+    description="Scales a Kubernetes deployment in a specific namespace",
     content="""
     #!/bin/bash
     set -e
 
-    # Set namespace flag if provided
-    namespace_flag=$( [ -n "$namespace" ] && echo "-n $namespace" || echo "" )
+    # Check if namespace is provided, exit if not
+    if [ -z "$namespace" ]; then
+        echo "❌ Namespace must be provided. Please specify a namespace."
+        exit 1
+    fi
+
+    # Set namespace flag
+    namespace_flag="-n $namespace"
 
     # Attempt to scale the deployment
     if kubectl scale deployment "$name" --replicas="$replicas" $namespace_flag; then
-        echo "✅ Successfully scaled deployment $name to $replicas replicas"
+        echo "✅ Successfully scaled deployment $name to $replicas replicas in namespace $namespace"
     else
-        echo "❌ Failed to scale deployment $name"
+        echo "❌ Failed to scale deployment $name in namespace $namespace"
         exit 1
     fi
     """,
     args=[
         Arg(name="name", type="str", description="Name of the deployment", required=True),
         Arg(name="replicas", type="int", description="Number of replicas", required=True),
-        Arg(name="namespace", type="str", description="Kubernetes namespace", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace", required=True),
     ],
 )
 

@@ -47,14 +47,20 @@ change_replicas_tool = KubernetesTool(
     #!/bin/bash
     set -e
 
-    # Set namespace flag if provided
-    namespace_flag=$( [ -n "$namespace" ] && echo "-n $namespace" || echo "" )
+    # Check if namespace is provided, exit if not
+    if [ -z "$namespace" ]; then
+        echo "❌ Namespace must be provided. Please specify a namespace to scale the resource."
+        exit 1
+    fi
+
+    # Set namespace flag
+    namespace_flag="-n $namespace"
 
     # Attempt to scale the resource
     if kubectl scale "$resource_type/$resource_name" --replicas="$replicas" $namespace_flag; then
-        echo "✅ Successfully changed replicas for $resource_type/$resource_name to $replicas"
+        echo "✅ Successfully changed replicas for $resource_type/$resource_name to $replicas in namespace $namespace"
     else
-        echo "❌ Failed to change replicas for $resource_type/$resource_name"
+        echo "❌ Failed to change replicas for $resource_type/$resource_name in namespace $namespace"
         exit 1
     fi
     """,
@@ -62,37 +68,44 @@ change_replicas_tool = KubernetesTool(
         Arg(name="resource_type", type="str", description="Type of resource (e.g., deployment, statefulset)", required=True),
         Arg(name="resource_name", type="str", description="Name of the resource", required=True),
         Arg(name="replicas", type="int", description="Number of replicas", required=True),
-        Arg(name="namespace", type="str", description="Kubernetes namespace", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace", required=True),
     ],
 )
 
+
 get_resource_events_tool = KubernetesTool(
     name="get_resource_events",
-    description="Fetches the last events for a Kubernetes resource",
+    description="Fetches the last events for a Kubernetes resource in a specific namespace",
     content="""
     #!/bin/bash
     set -e
 
-    # Set namespace flag if provided
-    namespace_flag=$( [ -n "$namespace" ] && echo "-n $namespace" || echo "" )
+    # Check if namespace is provided, exit if not
+    if [ -z "$namespace" ]; then
+        echo "❌ Namespace must be provided. Please specify a namespace to fetch resource events."
+        exit 1
+    fi
+
+    # Set namespace flag
+    namespace_flag="-n $namespace"
 
     # Check if resource exists and fetch events
     if kubectl get "$resource_type" "$resource_name" $namespace_flag > /dev/null 2>&1; then
         events=$(kubectl describe "$resource_type" "$resource_name" $namespace_flag | sed -n '/Events:/,$p')
         if [ -z "$events" ]; then
-            echo "📅 No events found for $resource_type/$resource_name"
+            echo "📅 No events found for $resource_type/$resource_name in namespace $namespace"
         else
-            echo "📅 Events for $resource_type/$resource_name:"
+            echo "📅 Events for $resource_type/$resource_name in namespace $namespace:"
             echo "$events" | sed 's/^/  /'
         fi
     else
-        echo "❗Error: $resource_type/$resource_name not found in ${namespace:-all namespaces}"
+        echo "❗Error: $resource_type/$resource_name not found in namespace $namespace"
     fi
     """,
     args=[
         Arg(name="resource_type", type="str", description="Type of resource (e.g., pod, deployment)", required=True),
         Arg(name="resource_name", type="str", description="Name of the resource", required=True),
-        Arg(name="namespace", type="str", description="Kubernetes namespace", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace", required=True),  # Marked as required
     ],
 )
 
@@ -103,14 +116,19 @@ get_resource_logs_tool = KubernetesTool(
     #!/bin/bash
     set -e
 
+    # Check if namespace is provided, exit if not
+    if [ -z "$namespace" ]; then
+        echo "❌ Namespace must be provided. Please specify a namespace to fetch logs."
+        exit 1
+    fi
+
     # Ensure optional parameters are set to empty strings if not provided
-    namespace=${namespace:-}
     container=${container:-}
     previous=${previous:-}
     tail=${tail:-}
 
     # Set flags for optional parameters
-    namespace_flag=$( [ -n "$namespace" ] && echo "-n $namespace" || echo "" )
+    namespace_flag="-n $namespace"
     container_flag=$( [ -n "$container" ] && echo "-c $container" || echo "" )
     previous_flag=$( [ "$previous" = "true" ] && echo "-p" || echo "" )
     tail_flag=$( [ -n "$tail" ] && echo "--tail=$tail" || echo "" )
@@ -119,23 +137,24 @@ get_resource_logs_tool = KubernetesTool(
     logs=$(kubectl logs $resource_type/$resource_name $namespace_flag $container_flag $previous_flag $tail_flag 2>/dev/null || echo "NotFound")
 
     if [ "$logs" = "NotFound" ]; then
-        echo "❗Error: Logs for $resource_type/$resource_name not found in ${namespace:-all namespaces}"
+        echo "❗Error: Logs for $resource_type/$resource_name not found in namespace $namespace"
     elif [ -z "$logs" ]; then
-        echo "📜 No logs found for $resource_type/$resource_name"
+        echo "📜 No logs found for $resource_type/$resource_name in namespace $namespace"
     else
-        echo "📜 Logs for $resource_type/$resource_name:"
+        echo "📜 Logs for $resource_type/$resource_name in namespace $namespace:"
         echo "$logs" | sed 's/^/  /'
     fi
     """,
     args=[
         Arg(name="resource_type", type="str", description="Type of resource (e.g., pod, deployment)", required=True),
         Arg(name="resource_name", type="str", description="Name of the resource", required=True),
-        Arg(name="namespace", type="str", description="Kubernetes namespace", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace", required=True),  # Marked as required
         Arg(name="container", type="str", description="Container name (for multi-container pods)", required=False),
         Arg(name="previous", type="bool", description="Fetch logs from previous terminated container", required=False),
         Arg(name="tail", type="int", description="Number of lines to show from the end of the logs", required=False),
     ],
 )
+
 
 node_status_tool = KubernetesTool(
     name="node_status",
@@ -160,14 +179,22 @@ node_status_tool = KubernetesTool(
 
 find_suspicious_errors_tool = KubernetesTool(
     name="find_suspicious_errors",
-    description="Finds suspicious errors in a Kubernetes namespace",
+    description="Finds suspicious errors in a Kubernetes namespace or across all namespaces",
     content="""
     #!/bin/bash
     set -e
-    namespace="${namespace:-default}"
-    echo "🔍 Searching for suspicious errors in namespace: $namespace"
+
+    # If namespace is not provided, default to searching across all namespaces
+    if [ -z "$namespace" ]; then
+        echo "🔍 Searching for suspicious errors in all namespaces"
+        namespace_flag="--all-namespaces"
+    else
+        echo "🔍 Searching for suspicious errors in namespace: $namespace"
+        namespace_flag="-n $namespace"
+    fi
+
     echo "========================================================="
-    kubectl get events -n $namespace --sort-by=.metadata.creationTimestamp | 
+    kubectl get events $namespace_flag --sort-by=.metadata.creationTimestamp | 
     grep -E "Error|Failed|CrashLoopBackOff|Evicted|OOMKilled" |
     tail -n 20 | 
     awk '{
@@ -179,8 +206,9 @@ find_suspicious_errors_tool = KubernetesTool(
         else emoji = "⚠️";
         print "  " emoji " " $0;
     }'
+
     echo "\n⚠️  Pods with non-Running status:"
-    kubectl get pods -n $namespace --field-selector status.phase!=Running | 
+    kubectl get pods $namespace_flag --field-selector status.phase!=Running | 
     awk 'NR>1 {
         status = $3;
         emoji = "❓";
@@ -192,7 +220,7 @@ find_suspicious_errors_tool = KubernetesTool(
     }'
     """,
     args=[
-        Arg(name="namespace", type="str", description="Kubernetes namespace to search for errors", required=False),
+        Arg(name="namespace", type="str", description="Kubernetes namespace to search for errors. If not provided, defaults to all namespaces.", required=False),
     ],
 )
 

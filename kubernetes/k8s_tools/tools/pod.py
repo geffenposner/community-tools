@@ -56,10 +56,10 @@ check_pod_restarts_tool = KubernetesTool(
     kubectl get pods $namespace_flag -o json | jq -r \
         '.items[] | 
         .metadata.namespace as $ns | 
-        .metadata.name as $name |
+        .metadata.name as $pod_name |
         .status.containerStatuses[]? | 
         select(.restartCount >= '"$threshold"') |
-        "\($ns) \($name) \(if .restartCount >= 20 then "🚨" elif .restartCount >= 10 then "⛔" else "⚠️" end) \(.restartCount) \(.state)"' |
+        "\($ns) \($pod_name) \(.name) \(if .restartCount >= 20 then "🚨" elif .restartCount >= 10 then "⛔" else "⚠️" end) \(.restartCount) \(.state)"' |
         awk '{print "  " $0}'
     """,
     args=[
