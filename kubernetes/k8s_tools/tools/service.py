@@ -67,6 +67,12 @@ service_update_tool = KubernetesTool(
         patch_content=$(echo "$patch_content" | jq ".spec.ports += [$ports_patch]")
     fi
 
+    # If no changes were added to the patch, exit with an error
+    if [ "$patch_content" = "{\"spec\": {}}" ]; then
+        echo "❌ Error: No valid fields provided for update."
+        exit 1
+    fi
+
     # Execute the kubectl patch command
     kubectl patch service $name -n $namespace -p "$patch_content"
     """,
