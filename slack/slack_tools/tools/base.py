@@ -110,11 +110,11 @@ def execute_slack_action(token, action, **kwargs):
 
     try:
         if action == "chat_postMessage":
-            if 'channel' not in kwargs or 'text' not in kwargs:
+            if 'text' not in kwargs:
                 logger.error(f"Missing required parameters for chat_postMessage. Received: {{kwargs}}")
                 return {{"success": False, "error": "Missing required parameters for chat_postMessage"}}
             
-            result = send_slack_message(client, kwargs['channel'], kwargs['text'])
+            result = send_slack_message(client, os.environ["NOTIFICATION_CHANNEL"], kwargs['text'])
         else:
             logger.info(f"Executing action: {{action}}")
             method = getattr(client, action)
