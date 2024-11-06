@@ -10,6 +10,7 @@ slack_send_message = SlackTool(
     args=[
         Arg(name="text", type="str", description="The message text, markdown is supported", required=True),
     ],
+    env=["NOTIFICATION_CHANNEL"]
 )
 
 # Slack Upload File Tool

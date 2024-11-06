@@ -4,8 +4,8 @@ import json
 SLACK_ICON_URL = "https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png"
 
 class SlackTool(Tool):
-    def __init__(self, name, description, action, args, long_running=False, mermaid_diagram=None):
-        env = ["KUBIYA_USER_EMAIL"]
+    def __init__(self, name, description, action, args,env = [], long_running=False, mermaid_diagram=None):
+        env = ["KUBIYA_USER_EMAIL", *env]
         secrets = ["SLACK_API_TOKEN"]
         
         arg_names_json = json.dumps([arg.name for arg in args])
