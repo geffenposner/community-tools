@@ -117,10 +117,33 @@ deployment_describe_tool = KubernetesTool(
     ],
 )
 
+deployment_rollout_status_tool = KubernetesTool(
+    name="deployment_rollout_status",
+    description="Checks the status of a Kubernetes deployment rollout, monitoring the progress of updates.",
+    content="""
+    #!/bin/bash
+    set -e
+
+    # Ensure namespace is provided
+    if [ -z "$namespace" ]; then
+        echo "❌ Error: Namespace is required to check rollout status of a specific deployment."
+        exit 1
+    fi
+
+    # Get the rollout status
+    kubectl rollout status deployment "$name" -n "$namespace"
+    """,
+    args=[
+        Arg(name="name", type="str", description="Name of the deployment", required=True),
+        Arg(name="namespace", type="str", description="Kubernetes namespace", required=True),
+    ],
+)
+
 for tool in [
     deployment_management_tool,
     scale_deployment_tool,
     deployment_rollout_tool,
     deployment_describe_tool,
+    deployment_rollout_status_tool,
 ]:
     tool_registry.register("kubernetes", tool)
