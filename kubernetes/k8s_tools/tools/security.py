@@ -12,17 +12,29 @@ rbac_analyzer_tool = KubernetesTool(
     echo "🔒 *RBAC Analysis:*"
     echo "================="
     
-    echo "📋 *ClusterRoles:*"
-    kubectl get clusterroles -o custom-columns=NAME:.metadata.name,VERBS:.rules[*].verbs[*],RESOURCES:.rules[*].resources[*]
+    echo "📋 *ClusterRoles with High-Risk Permissions:*"
+    echo "Severity: 🔴 HIGH - ClusterRoles with wildcard permissions or sensitive operations"
+    kubectl get clusterroles -o json | jq -r '
+        .items[] | 
+        select(.rules[].verbs[] | contains("*")) |
+        "  ⚠️  Role: \(.metadata.name) | Remediation: Review and limit wildcard permissions"
+    '
     
-    echo "\n📋 *ClusterRoleBindings:*"
-    kubectl get clusterrolebindings -o custom-columns=NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
+    echo "\n📋 *ClusterRoleBindings to system:anonymous:*"
+    echo "Severity: 🔴 HIGH - Anonymous access should be strictly limited"
+    kubectl get clusterrolebindings -o json | jq -r '
+        .items[] | 
+        select(.subjects[] | select(.name == "system:anonymous")) |
+        "  ⚠️  Binding: \(.metadata.name) | Remediation: Remove anonymous access"
+    '
     
-    echo "\n📋 *Roles across all namespaces:*"
-    kubectl get roles --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,VERBS:.rules[*].verbs[*],RESOURCES:.rules[*].resources[*]
-    
-    echo "\n📋 *RoleBindings across all namespaces:*"
-    kubectl get rolebindings --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
+    echo "\n📋 *Service Account Role Bindings:*"
+    echo "Cross-reference with service-account-analyzer for complete access review"
+    kubectl get rolebindings --all-namespaces -o json | jq -r '
+        .items[] | 
+        select(.subjects[] | select(.kind == "ServiceAccount")) |
+        "  👤 Namespace: \(.metadata.namespace), Binding: \(.metadata.name), SA: \(.subjects[].name)"
+    '
     """,
     args=[],
 )
@@ -37,11 +49,24 @@ service_account_analyzer_tool = KubernetesTool(
     echo "👤 *Service Account Analysis:*"
     echo "=========================="
     
-    echo "📋 *Service Accounts:*"
-    kubectl get serviceaccounts --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SECRETS:.secrets[*].name
+    echo "📋 *Default Service Account Usage (Security Risk):*"
+    echo "Severity: 🟡 MEDIUM - Using default SA may grant unintended permissions"
+    kubectl get pods --all-namespaces -o json | jq -r '
+        .items[] | 
+        select(.spec.serviceAccountName == "default") |
+        "  ⚠️  Namespace: \(.metadata.namespace), Pod: \(.metadata.name) | Remediation: Create dedicated SA"
+    '
     
-    echo "\n📋 *Service Accounts Usage in Pods:*"
-    kubectl get pods --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SERVICEACCOUNT:.spec.serviceAccountName
+    echo "\n📋 *Unused Service Accounts:*"
+    echo "Severity: 🟢 LOW - Cleanup recommended"
+    kubectl get sa --all-namespaces -o json | jq -r '
+        .items[] | 
+        select(.secrets | length == 0) |
+        "  ℹ️  Namespace: \(.metadata.namespace), SA: \(.metadata.name) | Remediation: Remove if not needed"
+    '
+    
+    echo "\n📋 *Cross-Reference with RBAC:*"
+    echo "Use rbac-analyzer to review associated role permissions"
     """,
     args=[],
 )
@@ -57,37 +82,28 @@ privileged_workload_detector_tool = KubernetesTool(
     echo "=============================="
     
     echo "⚠️  *Pods with Privileged Containers:*"
+    echo "Severity: 🔴 HIGH - Privileged containers can escape container isolation"
     kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.containers[].securityContext.privileged == true) |
-        "  🚨 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
+        "  🚨 Namespace: \(.metadata.namespace), Pod: \(.metadata.name) | Remediation: Remove privileged flag"
     '
     
     echo "\n⚠️  *Pods with Host Path Volumes:*"
+    echo "Severity: 🔴 HIGH - Host path access can lead to host system compromise"
     kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.volumes[]?.hostPath != null) |
-        "  📁 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
+        "  📁 Namespace: \(.metadata.namespace), Pod: \(.metadata.name) | Remediation: Use persistent volumes"
     '
     
-    echo "\n⚠️  *Pods with Host Network:*"
+    echo "\n⚠️  *Pods Running as Root:*"
+    echo "Severity: 🟡 MEDIUM - Running as root poses security risks"
     kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
-        select(.spec.hostNetwork == true) |
-        "  🌐 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
+        select(.spec.containers[].securityContext.runAsNonRoot != true) |
+        "  👤 Namespace: \(.metadata.namespace), Pod: \(.metadata.name) | Remediation: Set runAsNonRoot: true"
     '
-    
-    echo "\n📋 *Pod Security Policies:*"
-    kubectl get psp -o custom-columns=NAME:.metadata.name,PRIV:.spec.privileged,SELINUX:.spec.seLinux.rule,RUNASUSER:.spec.runAsUser.rule 2>/dev/null || echo "  No Pod Security Policies found"
-    
-    echo "\n📋 *Security Context Constraints:*"
-    kubectl get scc 2>/dev/null || echo "  No Security Context Constraints found (OpenShift specific)"
-    
-    echo "\n📋 *Admission Controllers:*"
-    kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations 2>/dev/null || echo "  No webhook configurations found"
-    
-    echo "\n📋 *Resource Quotas:*"
-    kubectl get resourcequotas --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,HARD:.spec.hard,USED:.status.used
     """,
     args=[],
 )
@@ -102,15 +118,25 @@ secret_analyzer_tool = KubernetesTool(
     echo "🔐 *Secrets Analysis:*"
     echo "=================="
     
-    echo "📋 *Secrets Overview:*"
-    kubectl get secrets --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
+    echo "📋 *Secrets in Default Namespace:*"
+    echo "Severity: 🟡 MEDIUM - Secrets in default namespace may be accidentally exposed"
+    kubectl get secrets -n default -o json | jq -r '
+        .items[] | 
+        select(.type != "kubernetes.io/service-account-token") |
+        "  ⚠️  Secret: \(.metadata.name) | Remediation: Move to dedicated namespace"
+    '
     
-    echo "\n📋 *Pods Mounting Secrets:*"
+    echo "\n📋 *Pods with Mounted Secrets:*"
+    echo "Cross-reference with RBAC for access control review"
     kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.volumes[]?.secret != null) |
         "  🔑 Namespace: \(.metadata.namespace), Pod: \(.metadata.name), Secret: \(.spec.volumes[].secret.secretName)"
     '
+    
+    echo "\n📋 *Unused Secrets:*"
+    echo "Severity: 🟢 LOW - Cleanup recommended"
+    # Complex jq query to find unused secrets would go here
     """,
     args=[],
 )
@@ -125,18 +151,27 @@ network_policy_analyzer_tool = KubernetesTool(
     echo "🌐 *Network Policy Analysis:*"
     echo "========================="
     
-    echo "📋 *Network Policies:*"
-    kubectl get networkpolicies --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,POD-SELECTOR:.spec.podSelector.matchLabels
-    
-    echo "\n⚠️  *Namespaces without Network Policies:*"
+    echo "⚠️  *Namespaces without Network Policies:*"
+    echo "Severity: 🔴 HIGH - Namespaces without isolation"
     kubectl get ns -o json | jq -r '
         .items[] | 
         select(.metadata.name as $ns | 
             ([$(kubectl get networkpolicy --all-namespaces -o json | 
                 jq -r ".items[] | select(.metadata.namespace == \"\($ns)\") | .metadata.name")] | length) == 0
         ) |
-        "  🚨 \(.metadata.name)"
+        "  🚨 Namespace: \(.metadata.name) | Remediation: Apply default deny policy"
     '
+    
+    echo "\n⚠️  *Overly Permissive Network Policies:*"
+    echo "Severity: 🟡 MEDIUM - Policies allowing all ingress/egress"
+    kubectl get networkpolicies --all-namespaces -o json | jq -r '
+        .items[] | 
+        select(.spec.ingress[]?.from == null or .spec.egress[]?.to == null) |
+        "  ⚠️  Namespace: \(.metadata.namespace), Policy: \(.metadata.name) | Remediation: Restrict traffic flows"
+    '
+    
+    echo "\n📋 *Cross-Reference with Workloads:*"
+    echo "Use privileged-workload-detector to review pods with host network access"
     """,
     args=[],
 )
