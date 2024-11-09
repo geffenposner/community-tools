@@ -18,22 +18,17 @@ rbac_analyzer_tool = KubernetesTool(
     echo "\n📋 ClusterRoleBindings:"
     kubectl get clusterrolebindings -o custom-columns=NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
     
-    if [ -n "$namespace" ]; then
-        echo "\n📋 Roles in namespace $namespace:"
-        kubectl get roles -n "$namespace" -o custom-columns=NAME:.metadata.name,VERBS:.rules[*].verbs[*],RESOURCES:.rules[*].resources[*]
-        
-        echo "\n📋 RoleBindings in namespace $namespace:"
-        kubectl get rolebindings -n "$namespace" -o custom-columns=NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
-    fi
+    echo "\n📋 Roles across all namespaces:"
+    kubectl get roles --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,VERBS:.rules[*].verbs[*],RESOURCES:.rules[*].resources[*]
+    
+    echo "\n📋 RoleBindings across all namespaces:"
+    kubectl get rolebindings --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 service_account_analyzer_tool = KubernetesTool(
     name="service_account_analyzer",
-    description="Audits service account usage and their associated roles",
+    description="Audits service account usage and their associated roles across all namespaces",
     content="""
     #!/bin/bash
     set -e
@@ -41,26 +36,17 @@ service_account_analyzer_tool = KubernetesTool(
     echo "👤 Service Account Analysis:"
     echo "=========================="
     
-    if [ -n "$namespace" ]; then
-        namespace_flag="-n $namespace"
-    else
-        namespace_flag="--all-namespaces"
-    fi
-    
     echo "📋 Service Accounts:"
-    kubectl get serviceaccounts $namespace_flag -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SECRETS:.secrets[*].name
+    kubectl get serviceaccounts --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SECRETS:.secrets[*].name
     
     echo "\n📋 Service Accounts Usage in Pods:"
-    kubectl get pods $namespace_flag -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SERVICEACCOUNT:.spec.serviceAccountName
+    kubectl get pods --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SERVICEACCOUNT:.spec.serviceAccountName
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 privileged_workload_detector_tool = KubernetesTool(
     name="privileged_workload_detector",
-    description="Detects privileged containers and potential security risks",
+    description="Detects privileged containers and potential security risks across all namespaces",
     content="""
     #!/bin/bash
     set -e
@@ -68,41 +54,32 @@ privileged_workload_detector_tool = KubernetesTool(
     echo "🔍 Privileged Container Analysis:"
     echo "=============================="
     
-    if [ -n "$namespace" ]; then
-        namespace_flag="-n $namespace"
-    else
-        namespace_flag="--all-namespaces"
-    fi
-    
     echo "⚠️  Pods with Privileged Containers:"
-    kubectl get pods $namespace_flag -o json | jq -r '
+    kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.containers[].securityContext.privileged == true) |
         "  🚨 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
     '
     
     echo "\n⚠️  Pods with Host Path Volumes:"
-    kubectl get pods $namespace_flag -o json | jq -r '
+    kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.volumes[]?.hostPath != null) |
         "  📁 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
     '
     
     echo "\n⚠️  Pods with Host Network:"
-    kubectl get pods $namespace_flag -o json | jq -r '
+    kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.hostNetwork == true) |
         "  🌐 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
     '
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 secret_analyzer_tool = KubernetesTool(
     name="secret_analyzer",
-    description="Analyzes Kubernetes secrets usage and mounting",
+    description="Analyzes Kubernetes secrets usage and mounting across all namespaces",
     content="""
     #!/bin/bash
     set -e
@@ -110,30 +87,21 @@ secret_analyzer_tool = KubernetesTool(
     echo "🔐 Secrets Analysis:"
     echo "=================="
     
-    if [ -n "$namespace" ]; then
-        namespace_flag="-n $namespace"
-    else
-        namespace_flag="--all-namespaces"
-    fi
-    
     echo "📋 Secrets Overview:"
-    kubectl get secrets $namespace_flag -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
+    kubectl get secrets --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
     
     echo "\n📋 Pods Mounting Secrets:"
-    kubectl get pods $namespace_flag -o json | jq -r '
+    kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.volumes[]?.secret != null) |
         "  🔑 Namespace: \(.metadata.namespace), Pod: \(.metadata.name), Secret: \(.spec.volumes[].secret.secretName)"
     '
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 network_policy_analyzer_tool = KubernetesTool(
     name="network_policy_analyzer",
-    description="Analyzes network policies and pod isolation",
+    description="Analyzes network policies and pod isolation across all namespaces",
     content="""
     #!/bin/bash
     set -e
@@ -141,14 +109,8 @@ network_policy_analyzer_tool = KubernetesTool(
     echo "🌐 Network Policy Analysis:"
     echo "========================="
     
-    if [ -n "$namespace" ]; then
-        namespace_flag="-n $namespace"
-    else
-        namespace_flag="--all-namespaces"
-    fi
-    
     echo "📋 Network Policies:"
-    kubectl get networkpolicies $namespace_flag -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,POD-SELECTOR:.spec.podSelector.matchLabels
+    kubectl get networkpolicies --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,POD-SELECTOR:.spec.podSelector.matchLabels
     
     echo "\n⚠️  Namespaces without Network Policies:"
     kubectl get ns -o json | jq -r '
@@ -160,9 +122,6 @@ network_policy_analyzer_tool = KubernetesTool(
         "  🚨 \(.metadata.name)"
     '
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 security_audit_report_tool = KubernetesTool(
@@ -174,26 +133,19 @@ security_audit_report_tool = KubernetesTool(
     
     echo "🔒 Kubernetes Security Audit Report"
     echo "================================="
-    
-    if [ -n "$namespace" ]; then
-        namespace_flag="-n $namespace"
-        echo "📍 Analyzing namespace: $namespace"
-    else
-        namespace_flag="--all-namespaces"
-        echo "📍 Analyzing all namespaces"
-    fi
+    echo "📍 Analyzing all namespaces"
     
     echo "\n1️⃣ RBAC Configuration"
     echo "-------------------"
-    kubectl get clusterroles,clusterrolebindings $namespace_flag
+    kubectl get clusterroles,clusterrolebindings --all-namespaces
     
     echo "\n2️⃣ Service Accounts"
     echo "----------------"
-    kubectl get serviceaccounts $namespace_flag
+    kubectl get serviceaccounts --all-namespaces
     
     echo "\n3️⃣ Pod Security"
     echo "-------------"
-    kubectl get pods $namespace_flag -o json | jq -r '
+    kubectl get pods --all-namespaces -o json | jq -r '
         .items[] | 
         select(.spec.containers[].securityContext.privileged == true or 
                .spec.volumes[]?.hostPath != null or 
@@ -203,23 +155,20 @@ security_audit_report_tool = KubernetesTool(
     
     echo "\n4️⃣ Network Policies"
     echo "-----------------"
-    kubectl get networkpolicies $namespace_flag
+    kubectl get networkpolicies --all-namespaces
     
     echo "\n5️⃣ Secrets Usage"
     echo "-------------"
-    kubectl get secrets $namespace_flag -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
+    kubectl get secrets --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
     
     echo "\n6️⃣ Resource Quotas"
     echo "----------------"
-    kubectl get resourcequotas $namespace_flag
+    kubectl get resourcequotas --all-namespaces
     
     echo "\n7️⃣ Pod Security Policies"
     echo "----------------------"
     kubectl get psp 2>/dev/null || echo "  No Pod Security Policies found"
     """,
-    args=[
-        Arg(name="namespace", type="str", description="Optional: Specific namespace to analyze", required=False),
-    ],
 )
 
 # Register all tools
