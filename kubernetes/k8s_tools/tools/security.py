@@ -48,12 +48,12 @@ service_account_analyzer_tool = KubernetesTool(
 
 privileged_workload_detector_tool = KubernetesTool(
     name="privileged_workload_detector",
-    description="Detects privileged containers and potential security risks across all namespaces, providing insights into security risks, potential vulnerabilities, and recommended remediation steps.",
+    description="Detects privileged containers, security policies, and potential security risks across all namespaces.",
     content="""
     #!/bin/bash
     set -e
     
-    echo "🔍 *Privileged Container Analysis:*"
+    echo "🔍 *Security Context Analysis:*"
     echo "=============================="
     
     echo "⚠️  *Pods with Privileged Containers:*"
@@ -76,6 +76,18 @@ privileged_workload_detector_tool = KubernetesTool(
         select(.spec.hostNetwork == true) |
         "  🌐 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
     '
+    
+    echo "\n📋 *Pod Security Policies:*"
+    kubectl get psp -o custom-columns=NAME:.metadata.name,PRIV:.spec.privileged,SELINUX:.spec.seLinux.rule,RUNASUSER:.spec.runAsUser.rule 2>/dev/null || echo "  No Pod Security Policies found"
+    
+    echo "\n📋 *Security Context Constraints:*"
+    kubectl get scc 2>/dev/null || echo "  No Security Context Constraints found (OpenShift specific)"
+    
+    echo "\n📋 *Admission Controllers:*"
+    kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations 2>/dev/null || echo "  No webhook configurations found"
+    
+    echo "\n📋 *Resource Quotas:*"
+    kubectl get resourcequotas --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,HARD:.spec.hard,USED:.status.used
     """,
     args=[],
 )
@@ -129,54 +141,6 @@ network_policy_analyzer_tool = KubernetesTool(
     args=[],
 )
 
-security_audit_report_tool = KubernetesTool(
-    name="security_audit_report",
-    description="Generates a comprehensive security audit report using kubectl, highlighting security risks, potential vulnerabilities, and recommended remediation steps.",
-    content="""
-    #!/bin/bash
-    set -e
-    
-    echo "🔒 *Kubernetes Security Audit Report*"
-    echo "================================="
-    echo "📍 *Analyzing all namespaces*"
-    
-    echo "\n1️⃣ *RBAC Configuration*"
-    echo "-------------------"
-    kubectl get clusterroles,clusterrolebindings --all-namespaces
-    
-    echo "\n2️⃣ *Service Accounts*"
-    echo "----------------"
-    kubectl get serviceaccounts --all-namespaces
-    
-    echo "\n3️⃣ *Pod Security*"
-    echo "-------------"
-    kubectl get pods --all-namespaces -o json | jq -r '
-        .items[] | 
-        select(.spec.containers[].securityContext.privileged == true or 
-               .spec.volumes[]?.hostPath != null or 
-               .spec.hostNetwork == true) |
-        "  ⚠️  Security concerns in Pod: \(.metadata.namespace)/\(.metadata.name)"
-    '
-    
-    echo "\n4️⃣ *Network Policies*"
-    echo "-----------------"
-    kubectl get networkpolicies --all-namespaces
-    
-    echo "\n5️⃣ *Secrets Usage*"
-    echo "-------------"
-    kubectl get secrets --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,TYPE:.type
-    
-    echo "\n6️⃣ *Resource Quotas*"
-    echo "----------------"
-    kubectl get resourcequotas --all-namespaces
-    
-    echo "\n7️⃣ *Pod Security Policies*"
-    echo "----------------------"
-    kubectl get psp 2>/dev/null || echo "  No Pod Security Policies found"
-    """,
-    args=[],
-)
-
 # Register all tools
 for tool in [
     rbac_analyzer_tool,
@@ -184,6 +148,5 @@ for tool in [
     privileged_workload_detector_tool,
     secret_analyzer_tool,
     network_policy_analyzer_tool,
-    security_audit_report_tool,
 ]:
     tool_registry.register("kubernetes", tool) 
