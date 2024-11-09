@@ -24,6 +24,7 @@ rbac_analyzer_tool = KubernetesTool(
     echo "\n📋 *RoleBindings across all namespaces:*"
     kubectl get rolebindings --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,ROLE:.roleRef.name,SUBJECTS:.subjects[*].name
     """,
+    args=[],
 )
 
 service_account_analyzer_tool = KubernetesTool(
@@ -42,6 +43,7 @@ service_account_analyzer_tool = KubernetesTool(
     echo "\n📋 *Service Accounts Usage in Pods:*"
     kubectl get pods --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,SERVICEACCOUNT:.spec.serviceAccountName
     """,
+    args=[],
 )
 
 privileged_workload_detector_tool = KubernetesTool(
@@ -75,6 +77,7 @@ privileged_workload_detector_tool = KubernetesTool(
         "  🌐 Namespace: \(.metadata.namespace), Pod: \(.metadata.name)"
     '
     """,
+    args=[],
 )
 
 secret_analyzer_tool = KubernetesTool(
@@ -97,6 +100,7 @@ secret_analyzer_tool = KubernetesTool(
         "  🔑 Namespace: \(.metadata.namespace), Pod: \(.metadata.name), Secret: \(.spec.volumes[].secret.secretName)"
     '
     """,
+    args=[],
 )
 
 network_policy_analyzer_tool = KubernetesTool(
@@ -122,6 +126,7 @@ network_policy_analyzer_tool = KubernetesTool(
         "  🚨 \(.metadata.name)"
     '
     """,
+    args=[],
 )
 
 security_audit_report_tool = KubernetesTool(
@@ -169,6 +174,7 @@ security_audit_report_tool = KubernetesTool(
     echo "----------------------"
     kubectl get psp 2>/dev/null || echo "  No Pod Security Policies found"
     """,
+    args=[],
 )
 
 # Register all tools
