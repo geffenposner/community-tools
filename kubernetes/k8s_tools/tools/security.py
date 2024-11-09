@@ -71,42 +71,140 @@ class ServiceAccountAnalyzer(OptimizedKubernetesTool):
         # Similar optimized processing for other checks...
         return "\n".join(output)
 
-# Similar optimized classes for other analyzers...
+class PrivilegedWorkloadDetector(OptimizedKubernetesTool):
+    async def execute_analysis(self) -> str:
+        pods = await run_kubectl_command("kubectl get pods --all-namespaces -o json")
+        
+        output = ["🔍 *Security Context Analysis:*", "==============================\n"]
+        
+        # Check privileged containers
+        privileged_pods = [
+            pod for pod in pods["items"]
+            if any(container.get("securityContext", {}).get("privileged") 
+                  for container in pod.get("spec", {}).get("containers", []))
+        ]
+        
+        output.extend([
+            "⚠️  *Pods with Privileged Containers:*",
+            "Severity: 🔴 HIGH - Privileged containers can escape container isolation"
+        ])
+        for pod in privileged_pods:
+            output.append(
+                f"  🚨 Namespace: {pod['metadata']['namespace']}, "
+                f"Pod: {pod['metadata']['name']} | Remediation: Remove privileged flag"
+            )
 
-rbac_analyzer_tool = RBACAnalyzer(
-    name="rbac_analyzer",
-    description="Conducts a focused assessment of RBAC configurations across the cluster",
-    content="",  # Content moved to execute_analysis method
-    args=[],
-)
+        # Check host path volumes
+        host_path_pods = [
+            pod for pod in pods["items"]
+            if any(volume.get("hostPath") for volume in pod.get("spec", {}).get("volumes", []))
+        ]
+        
+        output.extend([
+            "\n⚠️  *Pods with Host Path Volumes:*",
+            "Severity: 🔴 HIGH - Host path access can lead to host system compromise"
+        ])
+        for pod in host_path_pods:
+            output.append(
+                f"  📁 Namespace: {pod['metadata']['namespace']}, "
+                f"Pod: {pod['metadata']['name']} | Remediation: Use persistent volumes"
+            )
 
-service_account_analyzer_tool = ServiceAccountAnalyzer(
-    name="service_account_analyzer",
-    description="Analyzes service accounts across the cluster",
-    content="",  # Content moved to execute_analysis method
-    args=[],
-)
+        return "\n".join(output)
 
-privileged_workload_detector_tool = OptimizedKubernetesTool(
-    name="privileged_workload_detector",
-    description="Detects workloads with privileged containers",
-    content="",  # Content moved to execute_analysis method
-    args=[],
-)
+class SecretAnalyzer(OptimizedKubernetesTool):
+    async def execute_analysis(self) -> str:
+        secrets = await run_kubectl_command("kubectl get secrets -n default -o json")
+        pods = await run_kubectl_command("kubectl get pods --all-namespaces -o json")
+        
+        output = ["🔐 *Secrets Analysis:*", "==================\n"]
+        
+        # Check secrets in default namespace
+        default_secrets = [
+            secret for secret in secrets["items"]
+            if secret["type"] != "kubernetes.io/service-account-token"
+        ]
+        
+        output.extend([
+            "📋 *Secrets in Default Namespace:*",
+            "Severity: 🟡 MEDIUM - Secrets in default namespace may be accidentally exposed"
+        ])
+        for secret in default_secrets:
+            output.append(
+                f"  ⚠️  Secret: {secret['metadata']['name']} | "
+                "Remediation: Move to dedicated namespace"
+            )
 
-secret_analyzer_tool = OptimizedKubernetesTool(
-    name="secret_analyzer",
-    description="Analyzes secrets across the cluster",
-    content="",  # Content moved to execute_analysis method
-    args=[],
-)
+        # Check pods with mounted secrets
+        pods_with_secrets = [
+            pod for pod in pods["items"]
+            if any(volume.get("secret") for volume in pod.get("spec", {}).get("volumes", []))
+        ]
+        
+        output.extend([
+            "\n📋 *Pods with Mounted Secrets:*",
+            "Cross-reference with RBAC for access control review"
+        ])
+        for pod in pods_with_secrets:
+            secret_names = [
+                volume["secret"]["secretName"]
+                for volume in pod["spec"].get("volumes", [])
+                if volume.get("secret")
+            ]
+            for secret_name in secret_names:
+                output.append(
+                    f"  🔑 Namespace: {pod['metadata']['namespace']}, "
+                    f"Pod: {pod['metadata']['name']}, Secret: {secret_name}"
+                )
 
-network_policy_analyzer_tool = OptimizedKubernetesTool(
-    name="network_policy_analyzer",
-    description="Analyzes network policies across the cluster",
-    content="",  # Content moved to execute_analysis method
-    args=[],
-)
+        return "\n".join(output)
+
+class NetworkPolicyAnalyzer(OptimizedKubernetesTool):
+    async def execute_analysis(self) -> str:
+        namespaces = await run_kubectl_command("kubectl get ns -o json")
+        network_policies = await run_kubectl_command("kubectl get networkpolicy --all-namespaces -o json")
+        
+        output = ["🌐 *Network Policy Analysis:*", "=========================\n"]
+        
+        # Check namespaces without network policies
+        ns_with_policies = {
+            policy["metadata"]["namespace"]
+            for policy in network_policies["items"]
+        }
+        
+        ns_without_policies = [
+            ns for ns in namespaces["items"]
+            if ns["metadata"]["name"] not in ns_with_policies
+        ]
+        
+        output.extend([
+            "⚠️  *Namespaces without Network Policies:*",
+            "Severity: 🔴 HIGH - Namespaces without isolation"
+        ])
+        for ns in ns_without_policies:
+            output.append(
+                f"  🚨 Namespace: {ns['metadata']['name']} | "
+                "Remediation: Apply default deny policy"
+            )
+
+        # Check overly permissive policies
+        permissive_policies = [
+            policy for policy in network_policies["items"]
+            if any(not ingress.get("from") for ingress in policy["spec"].get("ingress", [])) or
+            any(not egress.get("to") for egress in policy["spec"].get("egress", []))
+        ]
+        
+        output.extend([
+            "\n⚠️  *Overly Permissive Network Policies:*",
+            "Severity: 🟡 MEDIUM - Policies allowing all ingress/egress"
+        ])
+        for policy in permissive_policies:
+            output.append(
+                f"  ⚠️  Namespace: {policy['metadata']['namespace']}, "
+                f"Policy: {policy['metadata']['name']} | Remediation: Restrict traffic flows"
+            )
+
+        return "\n".join(output)
 
 # Register all tools
 tools = [
