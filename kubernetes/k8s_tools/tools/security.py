@@ -206,6 +206,42 @@ class NetworkPolicyAnalyzer(OptimizedKubernetesTool):
 
         return "\n".join(output)
 
+# Instantiate tools
+rbac_analyzer_tool = RBACAnalyzer(
+    name="rbac_analyzer",
+    description="Conducts a focused assessment of RBAC configurations across the cluster",
+    content="",
+    args=[],
+)
+
+service_account_analyzer_tool = ServiceAccountAnalyzer(
+    name="service_account_analyzer",
+    description="Audits service account usage and their associated roles across all namespaces",
+    content="",
+    args=[],
+)
+
+privileged_workload_detector_tool = PrivilegedWorkloadDetector(
+    name="privileged_workload_detector",
+    description="Detects privileged containers and security risks",
+    content="",
+    args=[],
+)
+
+secret_analyzer_tool = SecretAnalyzer(
+    name="secret_analyzer",
+    description="Analyzes Kubernetes secrets usage and mounting across all namespaces",
+    content="",
+    args=[],
+)
+
+network_policy_analyzer_tool = NetworkPolicyAnalyzer(
+    name="network_policy_analyzer",
+    description="Analyzes network policies and pod isolation across all namespaces",
+    content="",
+    args=[],
+)
+
 # Register all tools
 tools = [
     rbac_analyzer_tool,
