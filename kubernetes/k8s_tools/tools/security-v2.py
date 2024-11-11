@@ -38,12 +38,12 @@ network_security_tool = KubernetesTool(
     
     # Check for missing ingress rules
     jq -r '.items[] | 
-        select(.spec.ingress == null) |
+        select(.spec.ingress | length == 0) |
         "No Ingress Rules: " + .metadata.namespace + "/" + .metadata.name
     ' /tmp/netpol.json
     
     # Find namespaces without network policies
-    comm -23 \
+    join -v 1 \
         <(jq -r '.items[].metadata.name' /tmp/ns.json | sort) \
         <(jq -r '.items[].metadata.namespace' /tmp/netpol.json | sort -u) | \
     while read ns; do
@@ -68,8 +68,11 @@ auth_security_tool = KubernetesTool(
     # Check for wildcard permissions
     jq -r '.items[] | 
         select(
-            .rules[].verbs[] == "*" and
-            .rules[].resources[] == "*"
+            (.rules // [])[] | 
+            select(
+                (.verbs // [])[] == "*" and
+                (.resources // [])[] == "*"
+            )
         ) |
         "Wildcard Permissions: " + .metadata.name
     ' /tmp/roles.json
@@ -77,11 +80,15 @@ auth_security_tool = KubernetesTool(
     # Check for service accounts with cluster rights
     jq -r '.items[] | 
         select(
-            .subjects[].kind == "ServiceAccount" and
-            .roleRef.kind == "ClusterRole"
+            (.subjects // [])[] | 
+            select(
+                .kind == "ServiceAccount"
+            )
         ) |
+        select(.roleRef.kind == "ClusterRole") |
         "SA with Cluster Rights: " + 
-        (.metadata.namespace // "cluster-wide") + "/" + .subjects[0].name
+        (.metadata.namespace // "cluster-wide") + "/" + 
+        (.subjects[0].name // "unknown")
     ' /tmp/bindings.json
     
     rm -f /tmp/roles.json /tmp/bindings.json
