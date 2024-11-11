@@ -4,9 +4,12 @@ from kubiya_sdk.tools.registry import tool_registry
 
 def create_jq_filter(severity="HIGH"):
     """Helper to format output with severity levels"""
-    return f'"\u001b[31m[{severity}]\u001b[0m"' if severity == "HIGH" else \
-           f'"\u001b[33m[{severity}]\u001b[0m"' if severity == "MEDIUM" else \
-           f'"\u001b[32m[{severity}]\u001b[0m"'
+    if severity == "HIGH":
+        return "'\\u001b[31m[HIGH]\\u001b[0m'"
+    elif severity == "MEDIUM":
+        return "'\\u001b[33m[MEDIUM]\\u001b[0m'"
+    else:
+        return "'\\u001b[32m[LOW]\\u001b[0m'"
 
 cluster_hardening_tool = KubernetesTool(
     name="cluster_hardening_analyzer",
@@ -21,23 +24,19 @@ cluster_hardening_tool = KubernetesTool(
     (
         # API server analysis
         kubectl get pods -n kube-system -l component=kube-apiserver -o json | \
-        jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-            .items[].spec.containers[].command[] | 
+        jq -r '.items[].spec.containers[].command[] | 
             select(
                 contains("--anonymous-auth=true") or
                 contains("--authorization-mode=AlwaysAllow")
-            ) | [$HIGH, "Insecure API Server Config:", .]
-        '
+            ) | "\\u001b[31m[HIGH]\\u001b[0m Insecure API Server Config: " + .'
     ) &
     
     (
         # Namespace analysis
         kubectl get ns -o json | \
-        jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-            .items[] | 
+        jq -r '.items[] | 
             select(.metadata.labels["pod-security.kubernetes.io/enforce"] != "restricted") |
-            [$HIGH, "Missing Pod Security:", .metadata.name]
-        '
+            "\\u001b[31m[HIGH]\\u001b[0m Missing Pod Security: " + .metadata.name'
     ) &
     
     wait
@@ -60,23 +59,20 @@ network_security_tool = KubernetesTool(
     echo "🌐 *Network Security Risks:*"
     
     # Focused output - only critical findings
-    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-        .items[] | 
+    jq -r '.items[] | 
         select(.spec.ingress == null) |
-        [$HIGH, "No Ingress Rules:", .metadata.namespace + "/" + .metadata.name]
+        "\\u001b[31m[HIGH]\\u001b[0m No Ingress Rules: " + .metadata.namespace + "/" + .metadata.name
     ' /tmp/netpol.json
     
-    # Store namespaces with policies
-    jq -r '.items[].metadata.namespace' /tmp/netpol.json | sort -u > /tmp/ns_with_policies.txt
-    
     # Compare against all namespaces
-    jq -r '.items[].metadata.name' /tmp/ns.json | while read ns; do
-        if ! grep -q "^${ns}$" /tmp/ns_with_policies.txt; then
-            echo "[HIGH] No Network Policies: ${ns}"
-        fi
+    comm -23 \
+        <(jq -r '.items[].metadata.name' /tmp/ns.json | sort) \
+        <(jq -r '.items[].metadata.namespace' /tmp/netpol.json | sort -u) | \
+    while read ns; do
+        echo -e "\\u001b[31m[HIGH]\\u001b[0m No Network Policies: ${ns}"
     done
     
-    rm /tmp/netpol.json /tmp/ns.json /tmp/ns_with_policies.txt
+    rm -f /tmp/netpol.json /tmp/ns.json
     """,
     args=[],
 )
@@ -96,25 +92,24 @@ auth_security_tool = KubernetesTool(
     echo "🔑 *Auth Security Risks:*"
     
     # Only show high-risk configurations
-    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-        .items[] | 
+    jq -r '.items[] | 
         select(
             .rules[].verbs[] == "*" and
             .rules[].resources[] == "*"
         ) |
-        [$HIGH, "Wildcard Permissions:", .metadata.name]
+        "\\u001b[31m[HIGH]\\u001b[0m Wildcard Permissions: " + .metadata.name
     ' /tmp/roles.json
     
-    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-        .items[] | 
+    jq -r '.items[] | 
         select(
             .subjects[].kind == "ServiceAccount" and
             .roleRef.kind == "ClusterRole"
         ) |
-        [$HIGH, "SA with Cluster Rights:", .metadata.namespace + "/" + .subjects[0].name]
+        "\\u001b[31m[HIGH]\\u001b[0m SA with Cluster Rights: " + 
+        (.metadata.namespace // "cluster-wide") + "/" + .subjects[0].name
     ' /tmp/bindings.json
     
-    rm /tmp/roles.json /tmp/bindings.json
+    rm -f /tmp/roles.json /tmp/bindings.json
     """,
     args=[],
 )
@@ -134,22 +129,20 @@ secret_security_tool = KubernetesTool(
     echo "🔐 *Secret Security Risks:*"
     
     # Focus on critical secret issues
-    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-        .items[] | 
+    jq -r '.items[] | 
         select(
             .type != "kubernetes.io/service-account-token" and
             .metadata.namespace == "default"
         ) |
-        [$HIGH, "Secret in Default NS:", .metadata.name]
+        "\\u001b[31m[HIGH]\\u001b[0m Secret in Default NS: " + .metadata.name
     ' /tmp/secrets.json
     
-    jq -c --arg MED $(printf '%s' "${create_jq_filter("MEDIUM")}") '
-        .items[] | 
+    jq -r '.items[] | 
         select(.spec.volumes[]?.secret != null) |
-        [$MED, "Secret Mount:", .metadata.namespace + "/" + .metadata.name]
+        "\\u001b[33m[MEDIUM]\\u001b[0m Secret Mount: " + .metadata.namespace + "/" + .metadata.name
     ' /tmp/pods.json
     
-    rm /tmp/secrets.json /tmp/pods.json
+    rm -f /tmp/secrets.json /tmp/pods.json
     """,
     args=[],
 )
@@ -167,17 +160,16 @@ supply_chain_tool = KubernetesTool(
     echo "📦 *Supply Chain Risks:*"
     
     # Focus on critical image security issues
-    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
-        .items[] | 
+    jq -r '.items[] | 
         .spec.containers[] | 
         select(
             (.image | contains(":latest")) or
             (.imagePullPolicy != "Always")
         ) |
-        [$HIGH, "Image Security:", .image]
+        "\\u001b[31m[HIGH]\\u001b[0m Image Security: " + .image
     ' /tmp/pods.json
     
-    rm /tmp/pods.json
+    rm -f /tmp/pods.json
     """,
     args=[],
 )
