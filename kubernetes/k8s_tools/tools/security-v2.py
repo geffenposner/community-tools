@@ -9,7 +9,7 @@ cluster_hardening_tool = KubernetesTool(
     #!/bin/bash
     set -e
     
-    # API server analysis
+    # API server analysis - specifically check kube-system where API server runs
     kubectl get pods -n kube-system -l component=kube-apiserver -o json | \
     jq -r '.items[].spec.containers[].command[] | 
         select(
@@ -33,24 +33,33 @@ network_security_tool = KubernetesTool(
     #!/bin/bash
     set -e
     
-    kubectl get netpol --all-namespaces -o json > /tmp/netpol.json
-    kubectl get ns -o json > /tmp/ns.json
+    # Store network policies and namespaces
+    TMPDIR=$(mktemp -d)
+    kubectl get netpol --all-namespaces -o json > "$TMPDIR/netpol.json"
+    kubectl get ns -o json > "$TMPDIR/ns.json"
     
     # Check for missing ingress rules
-    jq -r '.items[] | 
+    jq -r '
+        .items[] | 
         select(.spec.ingress | length == 0) |
-        "No Ingress Rules: " + .metadata.namespace + "/" + .metadata.name
-    ' /tmp/netpol.json
+        "No Ingress Rules: \(.metadata.namespace)/\(.metadata.name)"
+    ' "$TMPDIR/netpol.json"
     
     # Find namespaces without network policies
-    join -v 1 \
-        <(jq -r '.items[].metadata.name' /tmp/ns.json | sort) \
-        <(jq -r '.items[].metadata.namespace' /tmp/netpol.json | sort -u) | \
-    while read ns; do
-        echo "No Network Policies: ${ns}"
+    # Get all namespaces
+    NAMESPACES=$(jq -r '.items[].metadata.name' "$TMPDIR/ns.json")
+    # Get namespaces with network policies
+    NETPOL_NS=$(jq -r '.items[].metadata.namespace' "$TMPDIR/netpol.json" | sort -u)
+    
+    # Compare and report namespaces without policies
+    for ns in $NAMESPACES; do
+        if ! echo "$NETPOL_NS" | grep -q "^${ns}$"; then
+            echo "No Network Policies: ${ns}"
+        fi
     done
     
-    rm -f /tmp/netpol.json /tmp/ns.json
+    # Cleanup
+    rm -rf "$TMPDIR"
     """,
     args=[],
 )
@@ -106,13 +115,12 @@ secret_security_tool = KubernetesTool(
     kubectl get secrets -A -o json > /tmp/secrets.json
     kubectl get pods -A -o json > /tmp/pods.json
     
-    # Check for secrets in default namespace
+    # Check for secrets in all namespaces except service account tokens
     jq -r '.items[] | 
         select(
-            .type != "kubernetes.io/service-account-token" and
-            .metadata.namespace == "default"
+            .type != "kubernetes.io/service-account-token"
         ) |
-        "Secret in Default NS: " + .metadata.name
+        "Secret: " + .metadata.namespace + "/" + .metadata.name
     ' /tmp/secrets.json
     
     # Check for secret mounts
