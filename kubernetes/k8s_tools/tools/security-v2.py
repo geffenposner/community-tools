@@ -21,7 +21,7 @@ cluster_hardening_tool = KubernetesTool(
     (
         # API server analysis
         kubectl get pods -n kube-system -l component=kube-apiserver -o json | \
-        jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+        jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
             .items[].spec.containers[].command[] | 
             select(
                 contains("--anonymous-auth=true") or
@@ -33,7 +33,7 @@ cluster_hardening_tool = KubernetesTool(
     (
         # Namespace analysis
         kubectl get ns -o json | \
-        jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+        jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
             .items[] | 
             select(.metadata.labels["pod-security.kubernetes.io/enforce"] != "restricted") |
             [$HIGH, "Missing Pod Security:", .metadata.name]
@@ -60,7 +60,7 @@ network_security_tool = KubernetesTool(
     echo "🌐 *Network Security Risks:*"
     
     # Focused output - only critical findings
-    jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
         .items[] | 
         select(.spec.ingress == null) |
         [$HIGH, "No Ingress Rules:", .metadata.namespace + "/" + .metadata.name]
@@ -96,7 +96,7 @@ auth_security_tool = KubernetesTool(
     echo "🔑 *Auth Security Risks:*"
     
     # Only show high-risk configurations
-    jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
         .items[] | 
         select(
             .rules[].verbs[] == "*" and
@@ -105,7 +105,7 @@ auth_security_tool = KubernetesTool(
         [$HIGH, "Wildcard Permissions:", .metadata.name]
     ' /tmp/roles.json
     
-    jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
         .items[] | 
         select(
             .subjects[].kind == "ServiceAccount" and
@@ -134,7 +134,7 @@ secret_security_tool = KubernetesTool(
     echo "🔐 *Secret Security Risks:*"
     
     # Focus on critical secret issues
-    jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
         .items[] | 
         select(
             .type != "kubernetes.io/service-account-token" and
@@ -143,7 +143,7 @@ secret_security_tool = KubernetesTool(
         [$HIGH, "Secret in Default NS:", .metadata.name]
     ' /tmp/secrets.json
     
-    jq -c --arg MED ${create_jq_filter("MEDIUM")} '
+    jq -c --arg MED $(printf '%s' "${create_jq_filter("MEDIUM")}") '
         .items[] | 
         select(.spec.volumes[]?.secret != null) |
         [$MED, "Secret Mount:", .metadata.namespace + "/" + .metadata.name]
@@ -167,7 +167,7 @@ supply_chain_tool = KubernetesTool(
     echo "📦 *Supply Chain Risks:*"
     
     # Focus on critical image security issues
-    jq -c --arg HIGH ${create_jq_filter("HIGH")} '
+    jq -c --arg HIGH $(printf '%s' "${create_jq_filter("HIGH")}") '
         .items[] | 
         .spec.containers[] | 
         select(
